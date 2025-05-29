@@ -15,5 +15,6 @@ def download_and_extract_audio(url):
         os.remove(temp_video)
         return temp_audio
     except Exception as e:
-        print(f"Errore durante il download/estrazione: {e}")
+        print(f"Error during download/extraction: {e}")
         return None
+
