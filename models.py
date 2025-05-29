@@ -1,25 +1,29 @@
-import torch
-import torchaudio
-from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2ForSequenceClassification
+import os
+import tempfile
+import requests
+from moviepy.editor import VideoFileClip
 
-MODEL_ID = "dima806/english_accents_classification"
-
-feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(MODEL_ID)
-model = Wav2Vec2ForSequenceClassification.from_pretrained(MODEL_ID)
-
-def predict_accent(file_path):
-    speech, sr = torchaudio.load(file_path)
-    if sr != 16000:
-        resampler = torchaudio.transforms.Resample(orig_freq=sr, new_freq=16000)
-        speech = resampler(speech)
-
-    inputs = feature_extractor(speech[0], sampling_rate=16000, return_tensors="pt")
-    input_values = inputs.input_values
-
-    with torch.no_grad():
-        logits = model(input_values).logits
-        predicted_id = torch.argmax(logits, dim=-1).item()
-        confidence = torch.nn.functional.softmax(logits, dim=-1)[0][predicted_id].item()
+def process_video_from_url(url):
+    try:
+        # Scarica il file video temporaneamente
+        response = requests.get(url, stream=True)
+        if response.status_code != 200:
+            return None
+        
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_video:
+            for chunk in response.iter_content(chunk_size=1024*1024):
+                if chunk:
+                    temp_video.write(chunk)
+            video_path = temp_video.name
+        
+        # Estrai audio in WAV
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
+            audio_path = temp_audio.name
+            clip = VideoFileClip(video_path)
+            clip.audio.write_audiofile(audio_path, codec='pcm_s16le')
+        
+        return audio_path
     
-    label = model.config.id2label[predicted_id]
-    return label, confidence
+    except Exception as e:
+        print("Errore durante il download o l'estrazione:", e)
+        return None
