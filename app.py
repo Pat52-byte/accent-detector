@@ -2,17 +2,15 @@ import streamlit as st
 from models import predict_accent
 import os
 
-st.title("🎤 Accent Detector (English Only)")
+st.title("🎙️ English Accent Detector")
 
 uploaded_file = st.file_uploader("Upload a WAV file", type=["wav"])
 
-if uploaded_file:
-    audio_path = os.path.join("temp.wav")
-    with open(audio_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
+if uploaded_file is not None:
+    file_path = os.path.join("temp.wav")
+    with open(file_path, "wb") as f:
+        f.write(uploaded_file.read())
 
-    st.audio(audio_path, format="audio/wav")
+    accent, confidence = predict_accent(file_path)
+    st.success(f"Accent: {accent} — Confidence: {confidence:.2%}")
 
-    with st.spinner("Analyzing..."):
-        accent, confidence = predict_accent(audio_path)
-        st.success(f"🗣️ Accent: **{accent}**\n\n🔒 Confidence: **{confidence:.2%}**")
