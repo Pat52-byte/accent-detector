@@ -1,8 +1,7 @@
 import torch
 import torchaudio
-from transformers import Wav2Vec2ForSequenceClassification, AutoProcessor
-
-MODEL_ID = "dima806/english_accents_classification"
+from transformers import Wav2Vec2ForSequenceClassification, AutoProcesso
+MODEL_ID = "anton-l/english-accent-classification"
 processor = AutoProcessor.from_pretrained(MODEL_ID)
 model = Wav2Vec2ForSequenceClassification.from_pretrained(MODEL_ID)
 
@@ -20,5 +19,3 @@ def predict_accent(audio_path):
 
     label = model.config.id2label[predicted_id]
     return label, confidence
-
-
