@@ -1,18 +1,18 @@
-from transformers import Wav2Vec2ForSequenceClassification, Wav2Vec2Processor
-import torch
-import librosa
+import torchaudio
+from speechbrain.pretrained import EncoderClassifier
 
-MODEL_ID = "sauravjoshi/Accent-Classifier-Wav2Vec2"
-processor = Wav2Vec2Processor.from_pretrained(MODEL_ID)
-model = Wav2Vec2ForSequenceClassification.from_pretrained(MODEL_ID)
+# Carica il modello di classificazione degli accenti
+classifier = EncoderClassifier.from_hparams(
+    source="Jzuluaga/accent-id-commonaccent_xlsr-en-english",
+    savedir="tmpmodel"
+)
 
-def predict_accent(audio_path):
-    audio, sr = librosa.load(audio_path, sr=16000)
-    inputs = processor(audio, sampling_rate=16000, return_tensors="pt", padding=True)
-    with torch.no_grad():
-        logits = model(**inputs).logits
-    predicted_id = torch.argmax(logits, dim=-1).item()
-    confidence = torch.nn.functional.softmax(logits, dim=-1)[0][predicted_id].item()
-    label = model.config.id2label[predicted_id]
-    return label, confidence
-
+def predict_accent(audio_file):
+    # Carica il file audio
+    signal, fs = torchaudio.load(audio_file)
+    # Esegui la classificazione
+    prediction = classifier.classify_file(audio_file)
+    label = prediction[3][0]  # etichetta dell'accento
+    score = float(prediction[1][0].item()) * 100  # percentuale
+    explanation = f"The speaker's accent was classified as {label} with a confidence of {score:.2f}%."
+    return label, score, explanation
