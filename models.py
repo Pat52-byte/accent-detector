@@ -43,11 +43,18 @@ def predict_accent_from_url(url):
     try:
         video_path = download_video(url)
         audio_path = extract_audio(video_path)
-        label, score = classifier.classify_file(audio_path)
-        return label, float(score)
+
+        # Classify_file ora restituisce 4 valori
+        out_prob, score, index, text_lab = classifier.classify_file(audio_path)
+        # Prendi il primo (batch size 1)
+        label = text_lab[0]
+        confidence = float(score[0])
+
+        return label, confidence
     finally:
         for f in (video_path, audio_path):
             if f and os.path.exists(f):
                 os.remove(f)
+
 
 
