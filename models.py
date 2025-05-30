@@ -4,8 +4,10 @@ from speechbrain.pretrained import EncoderClassifier
 # Carica il modello di classificazione degli accenti
 classifier = EncoderClassifier.from_hparams(
     source="Jzuluaga/accent-id-commonaccent_xlsr-en-english",
-    savedir="tmpmodel"
+    savedir="tmpmodel",
+    run_opts={"use_symlink": False}
 )
+
 
 def predict_accent(audio_file):
     # Carica il file audio
