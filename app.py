@@ -4,18 +4,19 @@ from models import predict_accent_from_url
 st.set_page_config(page_title="Accent Detector", layout="centered")
 st.title("🎙️ Accent Detector from Video URL")
 
-st.markdown("Inserisci un link pubblico a un video (es. Loom o file MP4) con parlato in inglese.")
+st.markdown("Enter a public video link (e.g., Loom or .mp4) containing spoken English.")
 
-url = st.text_input("🔗 URL del video (Loom o .mp4 pubblico)")
+url = st.text_input("🔗 Video URL (public Loom or .mp4)")
 
-if st.button("Analizza accento") and url:
-    with st.spinner("⏳ Estraendo audio e analizzando..."):
+if st.button("Analyze Accent") and url:
+    with st.spinner("⏳ Extracting audio and analyzing..."):
         try:
             label, confidence = predict_accent_from_url(url)
-            st.success(f"✅ Accento rilevato: **{label}**")
-            st.info(f"🔍 Confidenza: {confidence:.2f}")
+            st.success(f"✅ Detected Accent: **{label}**")
+            st.info(f"🔍 Confidence: {confidence:.2f}")
         except Exception as e:
-            st.error(f"❌ Errore durante l'analisi: {e}")
+            st.error(f"❌ Error during analysis: {e}")
+
 
 
 
