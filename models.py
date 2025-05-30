@@ -1,59 +1,46 @@
-import os
-import uuid
-import requests
-import torchaudio
-import torch
-import moviepy.editor as mp
-import shutil
-
+import os, uuid, requests, shutil, math
+import torchaudio, moviepy.editor as mp
 from speechbrain.pretrained import EncoderClassifier
-from speechbrain.utils.fetching import LocalStrategy  # <— importiamo l’enum
+from speechbrain.utils.fetching import LocalStrategy
 
-# Inizializza il classificatore con local_strategy=COPY
+# 1) Accent model, copy-only strategy
 classifier = EncoderClassifier.from_hparams(
-    source="speechbrain/lang-id-commonlanguage_ecapa",
-    savedir="pretrained_models/lang-id-commonlanguage_ecapa",
+    source="Jzuluaga/accent-id-commonaccent_xlsr-en-english",
+    savedir="pretrained_models/accent-id-commonaccent_xlsr-en-english",
+    local_strategy=LocalStrategy.COPY,
     run_opts={"device": "cpu"},
-    use_auth_token=False,
-    local_strategy=LocalStrategy.COPY,   # <— forza la copia dei file
+    use_auth_token=False
 )
 
 def download_video(url):
-    temp_video_path = f"temp_{uuid.uuid4()}.mp4"
-    response = requests.get(url, stream=True)
-    response.raise_for_status()
-    with open(temp_video_path, "wb") as f:
-        for chunk in response.iter_content(chunk_size=8192):
+    path = f"temp_{uuid.uuid4()}.mp4"
+    resp = requests.get(url, stream=True); resp.raise_for_status()
+    with open(path, "wb") as f:
+        for chunk in resp.iter_content(8192):
             f.write(chunk)
-    return temp_video_path
-
-from moviepy.editor import VideoFileClip
+    return path
 
 def extract_audio(video_path):
-    temp_audio_path = f"temp_{uuid.uuid4()}.wav"
-    # Use a context manager so the clip is closed when done
-    with VideoFileClip(video_path) as video:
-        video.audio.write_audiofile(
-            temp_audio_path,
-            fps=16000,
-            codec='pcm_s16le'
-        )
-    return temp_audio_path
-
+    wav = f"temp_{uuid.uuid4()}.wav"
+    with mp.VideoFileClip(video_path) as video:
+        video.audio.write_audiofile(wav, fps=16000, codec="pcm_s16le")
+    return wav
 
 def predict_accent_from_url(url):
-    video_path = audio_path = None
+    vp = ap = None
     try:
-        video_path = download_video(url)
-        audio_path = extract_audio(video_path)
-        out_prob, score, index, text_lab = classifier.classify_file(audio_path)
-        label = text_lab[0]
-        confidence = float(score[0])
+        vp = download_video(url)
+        ap = extract_audio(vp)
+
+        out_prob, log_score, _, label_list = classifier.classify_file(ap)
+        # batch size is 1 → take [0]
+        label      = label_list[0]
+        confidence = math.exp(log_score[0])
+
         return label, confidence
     finally:
-        for f in (video_path, audio_path):
+        for f in (vp, ap):
             if f and os.path.exists(f):
                 os.remove(f)
-
 
 
