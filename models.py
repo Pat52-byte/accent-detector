@@ -3,68 +3,75 @@ import uuid
 import requests
 import subprocess
 
-import imageio_ffmpeg
+import torch
 import torchaudio
-from transformers import pipeline
+import imageio_ffmpeg
+from transformers import AutoProcessor, AutoModelForAudioClassification
 
-# 1) Get the ffmpeg binary bundled with imageio-ffmpeg
+# 1) Point to the bundled ffmpeg binary
 FFMPEG_EXE = imageio_ffmpeg.get_ffmpeg_exe()
 
-# 2) Init the HF audio-classification pipeline
-accent_pipe = pipeline(
-    task="audio-classification",
-    model="dima806/english_accents_classification",
-)
+# 2) Load the model & processor once at import time
+MODEL_ID = "dima806/english_accents_classification"
+processor = AutoProcessor.from_pretrained(MODEL_ID)
+model     = AutoModelForAudioClassification.from_pretrained(MODEL_ID)
+model.eval()
 
 def download_video(url: str) -> str:
-    """Download the video from URL to a temporary .mp4 file."""
-    mp4_path = f"tmp_{uuid.uuid4()}.mp4"
+    path = f"tmp_{uuid.uuid4()}.mp4"
     resp = requests.get(url, stream=True)
     resp.raise_for_status()
-    with open(mp4_path, "wb") as f:
+    with open(path, "wb") as f:
         for chunk in resp.iter_content(8192):
             f.write(chunk)
-    return mp4_path
+    return path
 
 def extract_audio(video_path: str) -> str:
-    """
-    Use subprocess + imageio-ffmpeg's ffmpeg to extract a mono 16 kHz WAV.
-    """
     wav_path = f"tmp_{uuid.uuid4()}.wav"
     cmd = [
         FFMPEG_EXE,
-        "-y",               # overwrite
-        "-i", video_path,   # input file
-        "-ac", "1",         # mono
-        "-ar", "16000",     # 16 kHz
+        "-y", "-i", video_path,
+        "-ac", "1", "-ar", "16000",
         wav_path
     ]
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return wav_path
 
 def predict_accent_from_url(url: str):
-    """
-    1) Download MP4
-    2) Extract WAV via ffmpeg subprocess
-    3) Load WAV via torchaudio → numpy array
-    4) Run HF pipeline on the raw array
-    5) Cleanup temp files
-    """
     mp4_file = wav_file = None
     try:
+        # 1) download & extract
         mp4_file = download_video(url)
         wav_file = extract_audio(mp4_file)
 
-        # Load with torchaudio (no ffmpeg needed here)
-        waveform, sr = torchaudio.load(wav_file)   # waveform: Tensor [chan, time]
-        audio = waveform.squeeze().numpy()         # shape [time] for mono
+        # 2) load with torchaudio → Tensor [1, time]
+        waveform, sr = torchaudio.load(wav_file)
+        waveform = waveform.squeeze(0)  # [time]
 
-        # Pass the numpy array + sampling rate
-        result = accent_pipe(audio, sampling_rate=sr, top_k=1)[0]
-        return result["label"], float(result["score"])
+        # 3) prep inputs for the model
+        inputs = processor(
+            waveform.numpy(),
+            sampling_rate=sr,
+            return_tensors="pt",
+            padding=True
+        )
+
+        # 4) inference
+        with torch.no_grad():
+            outputs = model(**inputs)
+        logits = outputs.logits  # [1, num_labels]
+        probs  = torch.softmax(logits, dim=-1)[0]
+
+        # 5) pick top-1
+        idx   = int(probs.argmax())
+        label = model.config.id2label[idx]
+        score = float(probs[idx])
+
+        return label, score
 
     finally:
-        for p in (mp4_file, wav_file):
-            if p and os.path.exists(p):
-                os.remove(p)
+        # cleanup
+        for fpath in (mp4_file, wav_file):
+            if fpath and os.path.exists(fpath):
+                os.remove(fpath)
 
