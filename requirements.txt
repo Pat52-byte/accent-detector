@@ -1,6 +1,6 @@
 streamlit
 transformers
+torch
 torchaudio
-moviepy==1.0.3
-speechbrain
 requests
+imageio-ffmpeg
