@@ -1,12 +1,23 @@
-from speechbrain.pretrained import EncoderClassifier
+import os
+import uuid
+import requests
 import torchaudio
 import torch
 import moviepy.editor as mp
-import requests
-import os
-import uuid
+import shutil
 
-# Inizializza il classificatore
+# Monkey-patch per evitare symlink su Windows
+from speechbrain.utils import fetching
+def _copy_only(src, dst, strategy):
+    # copia sempre il file, ignorando la symlink strategy
+    dst_parent = os.path.dirname(dst)
+    os.makedirs(dst_parent, exist_ok=True)
+    shutil.copy2(src, dst)
+fetching.link_with_strategy = _copy_only
+
+from speechbrain.pretrained import EncoderClassifier
+
+# Inizializza il classificatore (fa il download + copia)
 classifier = EncoderClassifier.from_hparams(
     source="speechbrain/lang-id-commonlanguage_ecapa",
     savedir="pretrained_models/lang-id-commonlanguage_ecapa",
@@ -17,6 +28,7 @@ classifier = EncoderClassifier.from_hparams(
 def download_video(url):
     temp_video_path = f"temp_{uuid.uuid4()}.mp4"
     response = requests.get(url, stream=True)
+    response.raise_for_status()
     with open(temp_video_path, "wb") as f:
         for chunk in response.iter_content(chunk_size=8192):
             f.write(chunk)
@@ -25,10 +37,12 @@ def download_video(url):
 def extract_audio(video_path):
     temp_audio_path = f"temp_{uuid.uuid4()}.wav"
     video = mp.VideoFileClip(video_path)
-    video.audio.write_audiofile(temp_audio_path, fps=16000, codec='pcm_s16le')  # 16 kHz, PCM WAV
+    video.audio.write_audiofile(temp_audio_path, fps=16000, codec='pcm_s16le')
     return temp_audio_path
 
 def predict_accent_from_url(url):
+    video_path = None
+    audio_path = None
     try:
         video_path = download_video(url)
         audio_path = extract_audio(video_path)
@@ -36,7 +50,8 @@ def predict_accent_from_url(url):
         return label, float(score)
     finally:
         # Pulizia file temporanei
-        for f in [video_path, audio_path]:
-            if os.path.exists(f):
+        for f in (video_path, audio_path):
+            if f and os.path.exists(f):
                 os.remove(f)
+
 
