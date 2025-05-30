@@ -1,11 +1,3 @@
- HEAD
-streamlit
-transformers
-torch
-torchaudio
-requests
-imageio-ffmpeg
-=======
 streamlit
 transformers
 torch
@@ -13,4 +5,3 @@ torchaudio
 requests
 imageio-ffmpeg
 
- 9e5d81a (Prepare project for deploy: clean root files)
