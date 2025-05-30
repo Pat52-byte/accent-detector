@@ -1,4 +1,3 @@
- HEAD
 import os
 import uuid
 import requests
@@ -12,17 +11,17 @@ from transformers import (
     Wav2Vec2ForSequenceClassification,
 )
 
-# 1) Point to the bundled ffmpeg binary
+# 1) Path al binario FFmpeg incluso in imageio-ffmpeg
 FFMPEG_EXE = imageio_ffmpeg.get_ffmpeg_exe()
 
-# 2) Load the proper feature extractor & model
+# 2) Caricamento una tantum del feature extractor e del modello
 MODEL_ID = "dima806/english_accents_classification"
 feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(MODEL_ID)
 model = Wav2Vec2ForSequenceClassification.from_pretrained(MODEL_ID)
 model.eval()
 
 def download_video(url: str) -> str:
-    """Download MP4 to a temp file."""
+    """Scarica il video da URL in un file MP4 temporaneo."""
     path = f"tmp_{uuid.uuid4()}.mp4"
     resp = requests.get(url, stream=True)
     resp.raise_for_status()
@@ -33,40 +32,40 @@ def download_video(url: str) -> str:
 
 def extract_audio(video_path: str) -> str:
     """
-    Use ffmpeg subprocess to extract a mono 16 kHz WAV.
+    Estrae un WAV mono 16 kHz usando FFmpeg in subprocess.
     """
     wav_path = f"tmp_{uuid.uuid4()}.wav"
     cmd = [
         FFMPEG_EXE,
-        "-y",
-        "-i", video_path,
-        "-ac", "1",
-        "-ar", "16000",
-        wav_path,
+        "-y",               # sovrascrivi se esiste
+        "-i", video_path,   # input file
+        "-ac", "1",         # mono
+        "-ar", "16000",     # 16 kHz
+        wav_path
     ]
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return wav_path
 
 def predict_accent_from_url(url: str):
     """
-    1) Download video → MP4
-    2) Extract audio → WAV
-    3) Load WAV with torchaudio → Tensor
-    4) Preprocess + infer with Wav2Vec2ForSequenceClassification
-    5) Softmax → top-1 (label, score)
-    6) Cleanup temp files
+    1) Download del MP4
+    2) Estrazione audio → WAV
+    3) Caricamento WAV → Tensor via torchaudio
+    4) Preprocessing + inferenza con Wav2Vec2ForSequenceClassification
+    5) Softmax → top-1 label + confidence
+    6) Pulizia dei file temporanei
     """
     mp4_file = wav_file = None
     try:
-        # 1 & 2)
+        # Passi 1 & 2
         mp4_file = download_video(url)
         wav_file = extract_audio(mp4_file)
 
-        # 3) load audio
-        waveform, sr = torchaudio.load(wav_file)  # → Tensor [1, time]
-        waveform = waveform.squeeze(0)            # → Tensor [time]
+        # Passo 3: load audio
+        waveform, sr = torchaudio.load(wav_file)  # Tensor [1, T]
+        waveform = waveform.squeeze(0)            # Tensor [T]
 
-        # 4) preprocess
+        # Passo 4: preprocessing
         inputs = feature_extractor(
             waveform.numpy(),
             sampling_rate=sr,
@@ -74,116 +73,21 @@ def predict_accent_from_url(url: str):
             padding=True
         )
 
-        # 5) inference
+        # Passo 5: inferenza
         with torch.no_grad():
             outputs = model(**inputs)
-        logits = outputs.logits[0]                # → Tensor [num_labels]
-        probs  = torch.softmax(logits, dim=-1)
+        logits = outputs.logits[0]                # Tensor [num_labels]
+        probs  = torch.softmax(logits, dim=-1)    # probabilità
 
-        # 6) pick top-1
-        idx   = int(probs.argmax())
-        label = model.config.id2label[idx]
-        score = float(probs[idx])
+        # Seleziona etichetta e confidence
+        idx        = int(probs.argmax())
+        label      = model.config.id2label[idx]
+        confidence = float(probs[idx] * 100)     # percentuale 0–100%
 
-        return label, score
+        return label, confidence
 
     finally:
-        # cleanup
+        # Passo 6: cleanup
         for path in (mp4_file, wav_file):
             if path and os.path.exists(path):
                 os.remove(path)
-
-import os
-import uuid
-import requests
-import subprocess
-
-import torch
-import torchaudio
-import imageio_ffmpeg
-from transformers import (
-    Wav2Vec2FeatureExtractor,
-    Wav2Vec2ForSequenceClassification,
-)
-
-# 1) Point to the bundled ffmpeg binary
-FFMPEG_EXE = imageio_ffmpeg.get_ffmpeg_exe()
-
-# 2) Load the proper feature extractor & model
-MODEL_ID = "dima806/english_accents_classification"
-feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(MODEL_ID)
-model = Wav2Vec2ForSequenceClassification.from_pretrained(MODEL_ID)
-model.eval()
-
-def download_video(url: str) -> str:
-    """Download MP4 to a temp file."""
-    path = f"tmp_{uuid.uuid4()}.mp4"
-    resp = requests.get(url, stream=True)
-    resp.raise_for_status()
-    with open(path, "wb") as f:
-        for chunk in resp.iter_content(8192):
-            f.write(chunk)
-    return path
-
-def extract_audio(video_path: str) -> str:
-    """
-    Use ffmpeg subprocess to extract a mono 16 kHz WAV.
-    """
-    wav_path = f"tmp_{uuid.uuid4()}.wav"
-    cmd = [
-        FFMPEG_EXE,
-        "-y",
-        "-i", video_path,
-        "-ac", "1",
-        "-ar", "16000",
-        wav_path,
-    ]
-    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    return wav_path
-
-def predict_accent_from_url(url: str):
-    """
-    1) Download video → MP4
-    2) Extract audio → WAV
-    3) Load WAV with torchaudio → Tensor
-    4) Preprocess + infer with Wav2Vec2ForSequenceClassification
-    5) Softmax → top-1 (label, score)
-    6) Cleanup temp files
-    """
-    mp4_file = wav_file = None
-    try:
-        # 1 & 2)
-        mp4_file = download_video(url)
-        wav_file = extract_audio(mp4_file)
-
-        # 3) load audio
-        waveform, sr = torchaudio.load(wav_file)  # → Tensor [1, time]
-        waveform = waveform.squeeze(0)            # → Tensor [time]
-
-        # 4) preprocess
-        inputs = feature_extractor(
-            waveform.numpy(),
-            sampling_rate=sr,
-            return_tensors="pt",
-            padding=True
-        )
-
-        # 5) inference
-        with torch.no_grad():
-            outputs = model(**inputs)
-        logits = outputs.logits[0]                # → Tensor [num_labels]
-        probs  = torch.softmax(logits, dim=-1)
-
-        # 6) pick top-1
-        idx   = int(probs.argmax())
-        label = model.config.id2label[idx]
-        score = float(probs[idx])
-
-        return label, score
-
-    finally:
-        # cleanup
-        for path in (mp4_file, wav_file):
-            if path and os.path.exists(path):
-                os.remove(path)
- 9e5d81a (Prepare project for deploy: clean root files)
