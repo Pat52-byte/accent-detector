@@ -1,31 +1,21 @@
 import streamlit as st
-from extract_audio import process_video_from_url
-from models import predict_accent
+from models import predict_accent_from_url
 
-st.set_page_config(page_title="English Accent Classifier", layout="centered")
+st.set_page_config(page_title="Accent Detector", layout="centered")
+st.title("🎙️ Accent Detector from Video URL")
 
-st.title("🎙️ English Accent Classifier from Video URL")
-st.write("Paste a public video URL (e.g., Loom, MP4) to analyze the English accent.")
+st.markdown("Inserisci un link pubblico a un video (es. Loom o file MP4) con parlato in inglese.")
 
-video_url = st.text_input("🔗 Video URL (must be direct and public):")
+url = st.text_input("🔗 URL del video (Loom o .mp4 pubblico)")
 
-if st.button("Analyze Accent"):
-    if not video_url:
-        st.warning("Please enter a valid video URL.")
-    else:
-        with st.spinner("Downloading and extracting audio..."):
-            audio_path, error = process_video_from_url(video_url)
-
-        if error:
-            st.error(f"Error: {error}")
-        else:
-            with st.spinner("Analyzing accent..."):
-                label, confidence, explanation = predict_accent(audio_path)
-
-            st.success("Accent analysis completed.")
-            st.markdown(f"**🗣️ Detected Accent:** {label}")
-            st.markdown(f"**✅ Confidence:** {confidence:.2f}%")
-            st.markdown(f"**ℹ️ Summary:** {explanation}")
+if st.button("Analizza accento") and url:
+    with st.spinner("⏳ Estraendo audio e analizzando..."):
+        try:
+            label, confidence = predict_accent_from_url(url)
+            st.success(f"✅ Accento rilevato: **{label}**")
+            st.info(f"🔍 Confidenza: {confidence:.2f}")
+        except Exception as e:
+            st.error(f"❌ Errore durante l'analisi: {e}")
 
 
 
