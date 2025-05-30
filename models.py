@@ -27,29 +27,28 @@ def download_video(url):
             f.write(chunk)
     return temp_video_path
 
+from moviepy.editor import VideoFileClip
+
 def extract_audio(video_path):
     temp_audio_path = f"temp_{uuid.uuid4()}.wav"
-    video = mp.VideoFileClip(video_path)
-    video.audio.write_audiofile(
-        temp_audio_path,
-        fps=16000,
-        codec='pcm_s16le'
-    )
+    # Use a context manager so the clip is closed when done
+    with VideoFileClip(video_path) as video:
+        video.audio.write_audiofile(
+            temp_audio_path,
+            fps=16000,
+            codec='pcm_s16le'
+        )
     return temp_audio_path
 
+
 def predict_accent_from_url(url):
-    video_path = None
-    audio_path = None
+    video_path = audio_path = None
     try:
         video_path = download_video(url)
         audio_path = extract_audio(video_path)
-
-        # Classify_file ora restituisce 4 valori
         out_prob, score, index, text_lab = classifier.classify_file(audio_path)
-        # Prendi il primo (batch size 1)
         label = text_lab[0]
         confidence = float(score[0])
-
         return label, confidence
     finally:
         for f in (video_path, audio_path):
